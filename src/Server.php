@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Itseasy\Websocket;
 
+use Itseasy\Websocket\Config;
 use Amp\Http\Server\HttpServer;
 use Amp\Http\Server\Middleware;
 use Amp\Http\Server\Middleware\Internal\MiddlewareRequestHandler;
@@ -23,35 +24,37 @@ class Server implements LoggerAwareInterface
 
     protected $router;
     protected $config = [];
+    protected $handlers = [];
     protected $middlewares = [];
 
-    public function __construct(array $config = [], array $middlewares = [])
-    {
+    public function __construct(
+        Config $config,
+        array $handlers = [],
+        array $middlewares = []
+    ) {
         $this->config = $config;
+        $this->handlers = $handlers;
         $this->middlewares = $middlewares;
+
         $this->router = new Router();
     }
 
     public function prepare()
     {
-        foreach ($this->config["listen_address"] as $address) {
+        foreach ($this->config->getListenAddresses() as $address) {
             $server[] = AmpSocketServer::listen($address);
         }
 
-        foreach($this->config["handlers"] as $handler) {
-            if (!$handler["handler"] instanceof ClientHandler) {
-                continue;
-            }
-
+        foreach ($this->handlers as $handler) {
             call_user_func_array(
                 [$this->router, "addRoute"],
                 array_merge(
                     [
-                        $handler["method"],
-                        $handler["route"],
-                        new AmpWebsocket($handler["handler"])
+                        $handler->getMethod(),
+                        $handler->getRoute(),
+                        $handler->getHandler()
                     ],
-                    $handler["middlewares"]
+                    $handler->getMiddlewares()
                 )
             );
         }
@@ -68,7 +71,7 @@ class Server implements LoggerAwareInterface
 
     public function start()
     {
-        Loop::run(function() use ($server) : Promise {
+        Loop::run(function () use ($server) : Promise {
             $httpServer = $this->prepare();
             return $httpServer->start();
         });

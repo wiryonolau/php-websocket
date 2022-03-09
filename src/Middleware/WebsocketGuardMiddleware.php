@@ -6,12 +6,13 @@ namespace Itseasy\Websocket\Middleware;
 use Amp\Http\Server\Middleware as MiddlewareInterface;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
-use Amp\Promise;
-use Exception;
-use Laminas\Log\LoggerAwareInterface;
-use Laminas\Log\LoggerAwareTrait;
 use Amp\Http\Server\Response;
 use Amp\Http\Status;
+use Amp\Promise;
+use Exception;
+use Itseasy\Websocket\Config;
+use Laminas\Log\LoggerAwareInterface;
+use Laminas\Log\LoggerAwareTrait;
 
 use function Amp\call;
 
@@ -21,7 +22,7 @@ class WebsocketGuardMiddleware implements MiddlewareInterface, LoggerAwareInterf
 
     protected $config;
 
-    public function __construct(array $config)
+    public function __construct(Config $config)
     {
         $this->config = $config;
     }
@@ -29,26 +30,21 @@ class WebsocketGuardMiddleware implements MiddlewareInterface, LoggerAwareInterf
     public function handleRequest(Request $request, RequestHandler $requestHandler): Promise
     {
         return call(function() use ($request, $requestHandler) {
-            $response = yield $requestHandler->handleRequest($request);
-
             // No guard
-            if (!count($this->config["allowed_origins"])) {
-                return $response;
+            if (!count($this->config->getAllowedOrigins())) {
+                return  yield $requestHandler->handleRequest($request);
             }
 
             if (!in_array(
                 $request->getHeader('origin'),
-                $this->config["allowed_origins"],
+                $this->config->getAllowedOrigins(),
                 true
             )) {
-                $this->getLogger()->debug("not allowed");
-
                 return new Response(
                     Status::FORBIDDEN
                 );
             }
-
-            return $response;
+            return yield $requestHandler->handleRequest($request);
         });
     }
 }

@@ -4,16 +4,18 @@ declare(strict_types=1);
 namespace Itseasy\Websocket\Factory;
 
 use Amp\Websocket\Server\Websocket as AmpWebsocket;
+use Itseasy\Websocket\Config;
 use Itseasy\Websocket\Logger\DefaultLogger;
 use Itseasy\Websocket\Server;
-use Psr\Container\ContainerInterface;
+use Itseasy\Websocket\WebsocketHandler;
 use Laminas\Log\LoggerAwareInterface;
+use Psr\Container\ContainerInterface;
 
 class ServerFactory
 {
     public function __invoke(ContainerInterface $container) : Server
     {
-        $config = $container->get("Config")->getConfig()["websocket"];
+        $config = $container->get(Config::class);
 
         if ($container->has("Logger")) {
             $logger = $container->get("Logger");
@@ -22,44 +24,38 @@ class ServerFactory
         }
 
         $middlewares = [];
-        foreach ($config["middlewares"] as $middleware) {
+        foreach ($config->getMiddlewares() as $middleware) {
             $globalMiddleware = $container->get($middleware);
-            $globalMiddleware = $this->setObjectLogger($globalMiddleware, $logger);
+            if ($globalMiddleware instanceof LoggerAwareInterface) {
+                $globalMiddleware->setLogger($logger);
+            }
             $middlewares[] = $globalMiddleware;
         }
 
-        foreach ($config["handlers"] as $key => $handler) {
-            $actualHandler = $container->get($handler["handler"]);
-            $actualHandler = $this->setObjectLogger($actualHandler, $logger);
+        $handlers = [];
 
-            $config["handlers"][$key]["handler"] = $actualHandler;
 
-            if (!empty($handler["middlewares"])) {
-                foreach ($handler["middlewares"] as $index => $middleware) {
-                    $actualMiddleware = $container->get($middleware);
-                    $actualMiddleware = $this->setObjectLogger($actualMiddleware, $logger);
-                    $config["handlers"][$key]["middlewares"][$index] = $actualMiddleware;
-                }
-            } else {
-                $config["handlers"][$key]["middlewares"] = [];
-            }
+        foreach ($config->getHandlers() as $handler) {
+            $routeMiddleware = isset($handler["middlewares"]) ? $handler["middlewares"] : [];
+
+            $route = new WebsocketHandler(
+                $handler["route"],
+                $handler["method"],
+                $container->get($handler["handler"]),
+                array_map(function($middleware) use ($container) {
+                    return $container->get($middleware);
+                }, $routeMiddleware)
+            );
+
+            $route->setLogger($logger);
+            $handlers[] = $route;
         }
 
-        $server = new Server($config, $middlewares);
+        $server = new Server($config, $handlers, $middlewares);
         $server->setLogger($logger);
 
         return $server;
     }
 
-    private function setObjectLogger($obj, $logger)
-    {
-        try {
-            if ($obj instanceof LoggerAwareInterface) {
-                $obj->setLogger($logger);
-            }
-        } catch (Exception $e) {
-            $logger->debug($e->getMessage());
-        }
-        return $obj;
-    }
+
 }

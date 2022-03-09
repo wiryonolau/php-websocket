@@ -8,23 +8,15 @@ use Amp\Websocket\ClosedException;
 use Amp\Websocket\Message;
 use Exception;
 use Itseasy\Websocket\Server;
+use Firebase\JWT\JWT;
 
-use function Amp\delay;
 use function Amp\call;
 use function Amp\Websocket\Client\connect;
 
 final class WebsocketTest extends AsyncTestCase
 {
-    protected function startServer() : Promise
+    protected function startServer($app) : Promise
     {
-        $app = new Application([
-            "config_path" => [
-                __DIR__."/../config/*.config.php",
-                __DIR__."/config/*.config.php"
-            ],
-        ]);
-        $app->build();
-
         $server = $app->getContainer()->get(Server::class);
         $server = $server->prepare();
 
@@ -36,12 +28,37 @@ final class WebsocketTest extends AsyncTestCase
 
     public function testWebsocket()
     {
-        $this->setTimeout(200);
+        $app = new Application([
+            "config_path" => [
+                __DIR__."/../config/*.config.php",
+                __DIR__."/config/*.config.php"
+            ],
+        ]);
+        $app->build();
 
-        $server = yield $this->startServer();
+        // Milisecond
+        $this->setTimeout(2000);
+
+        $time = time();
+
+        $server = yield $this->startServer($app);
+
+        $payload = [
+            "iss" => "http://127.0.0.1:13370",
+            "aud" => "http://127.0.0.1:13370",
+            "iat" => $time,
+            "nbf" => $time,
+            "exp" => $time + 86400
+        ];
+
+        $token = JWT::encode(
+            $payload,
+            $app->getConfig()["websocket"]["guard"]["jwt"]["private_key"],
+            $app->getConfig()["websocket"]["guard"]["jwt"]["headers"]["alg"]
+        );
 
         try {
-            $client = yield connect('ws://127.0.0.1:13370/ws/echo');
+            $client = yield connect(sprintf('ws://127.0.0.1:13370/ws/echo?jwt=%s', $token));
             $client->send("Test");
             $message = yield $client->receive();
 

@@ -10,10 +10,28 @@ return [
         "allowed_origins" => [
             "http://localhost:8080",
         ],
+        "guard" => [
+            "query" => "jwt",
+            "jwt" => [
+                "leeway" => 0,
+                "private_key" => "",
+                "public_key" => "",
+                "headers" => [
+                    "typ" => "JWT",
+                    "alg" => "RS256"
+                ],
+                "payloads" => [
+                    "iss" => "",
+                    "aud" => "",
+                    "iat" => "",
+                    "nbf" => "",
+                    "exp" => ""
+                ]
+            ]
+        ],
         "handlers" => [
         ],
         "middlewares" => [
-            Middleware\WebsocketGuardMiddleware::class
         ]
     ]
 ];

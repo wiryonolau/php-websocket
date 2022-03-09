@@ -57,12 +57,18 @@ class EchoHandler implements ClientHandler, WebsocketServerObserver, LoggerAware
         Request $request,
         Response $response
     ) : Promise {
-
-        return call(function () use ($gateway, $client): Generator {
+        $jwt = $request->getAttribute("jwt");
+        return call(function () use ($gateway, $client, $jwt): Generator {
             while ($message = yield $client->receive()) {
+                if ($jwt->exp < time()) {
+                    break;
+                }
+
                 $gateway->broadcast(sprintf(
                     yield $message->buffer()
                 ));
+
+                yield new Delayed(1000);
             }
         });
 
