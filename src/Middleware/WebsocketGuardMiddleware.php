@@ -6,12 +6,14 @@ namespace Itseasy\Websocket\Middleware;
 use Amp\Http\Server\Middleware as MiddlewareInterface;
 use Amp\Http\Server\Request;
 use Amp\Http\Server\RequestHandler;
-use Amp\Coroutine;
 use Amp\Promise;
-use Generator;
-use RuntimeException;
+use Exception;
 use Laminas\Log\LoggerAwareInterface;
 use Laminas\Log\LoggerAwareTrait;
+use Amp\Http\Server\Response;
+use Amp\Http\Status;
+
+use function Amp\call;
 
 class WebsocketGuardMiddleware implements MiddlewareInterface, LoggerAwareInterface
 {
@@ -19,33 +21,34 @@ class WebsocketGuardMiddleware implements MiddlewareInterface, LoggerAwareInterf
 
     protected $config;
 
-    public function __construct(array $config = [])
+    public function __construct(array $config)
     {
         $this->config = $config;
     }
 
     public function handleRequest(Request $request, RequestHandler $requestHandler): Promise
     {
-        return new Coroutine($this->guard($request, $requestHandler));
-    }
+        return call(function() use ($request, $requestHandler) {
+            $response = yield $requestHandler->handleRequest($request);
 
-    public function guard(Request $request, RequestHandler $requestHandler): Generator
-    {
-        $response = yield $requestHandler->handleRequest($request);
+            // No guard
+            if (!count($this->config["allowed_origins"])) {
+                return $response;
+            }
 
-        // No guard
-        if (!count($this->config["allowed_origins"])) {
+            if (!in_array(
+                $request->getHeader('origin'),
+                $this->config["allowed_origins"],
+                true
+            )) {
+                $this->getLogger()->debug("not allowed");
+
+                return new Response(
+                    Status::FORBIDDEN
+                );
+            }
+
             return $response;
-        }
-
-        if (!in_array(
-            $request->getHeader('origin'),
-            $this->config["allowed_origins"],
-            true
-        )) {
-            throw new RuntimeException("Forbidden Access");
-        }
-
-        return $response;
+        });
     }
 }

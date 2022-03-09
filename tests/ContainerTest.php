@@ -14,7 +14,6 @@ final class ContainerTest extends TestCase
             ],
         ]);
         $app->build();
-
         $entries = $app->getContainer()->getKnownEntryNames();
         foreach ($entries as $entry) {
             try {
@@ -24,7 +23,6 @@ final class ContainerTest extends TestCase
                 debug(sprintf("ERROR : \n%s\n\n", $e->getMessage()));
                 $object = null;
             }
-
 
             $this->assertEquals(is_object($object), true);
         }

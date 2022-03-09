@@ -1,52 +1,62 @@
 <?php
 namespace Itseasy\Websocket\Test;
 
-use Itseasy\Websocket;
-use PHPUnit\Framework\TestCase;
 use Amp\Loop;
-use function Amp\delay;
-use function Amp\Websocket\Client\connect;
 use Amp\PHPUnit\AsyncTestCase;
-use Exception;
+use Amp\Promise;
 use Amp\Websocket\ClosedException;
+use Amp\Websocket\Message;
+use Exception;
+use Itseasy\Websocket\Server;
+
+use function Amp\delay;
+use function Amp\call;
+use function Amp\Websocket\Client\connect;
 
 final class WebsocketTest extends AsyncTestCase
 {
+    protected function startServer() : Promise
+    {
+        $app = new Application([
+            "config_path" => [
+                __DIR__."/../config/*.config.php",
+                __DIR__."/config/*.config.php"
+            ],
+        ]);
+        $app->build();
+
+        $server = $app->getContainer()->get(Server::class);
+        $server = $server->prepare();
+
+        return call(function() use ($server) {
+            yield $server->start();
+            return $server;
+        });
+    }
+
     public function testWebsocket()
     {
-        $messages = [
-            "Hello",
-            "Ping: 1",
-            "Ping: 2",
-            "Ping: 3",
-            "Goodbye"
-        ];
+        $this->setTimeout(200);
 
-        $result = [];
+        $server = yield $this->startServer();
 
-        $connection = yield connect('ws://127.0.0.1:13370/ws/echo');
-        yield $connection->send($messages[0]);
+        try {
+            $client = yield connect('ws://127.0.0.1:13370/ws/echo');
+            $client->send("Test");
+            $message = yield $client->receive();
 
-        while ($message = yield $connection->receive()) {
-            $payload = yield $message->buffer();
-            printf("Received: %s\n", $payload);
+            $this->assertInstanceOf(Message::class, $message);
+            $this->assertFalse($message->isBinary());
+            $this->assertSame('Test', yield $message->buffer());
 
-            $result[] = $payload;
+            $promise = $client->receive();
+            $client->close();
 
-            if ($payload === "Goodbye") {
-                $connection->close();
-                break;
-            }
-
-            yield delay(1000); // Pause the coroutine for 1 second.
-
-            for($i = 1; $i < count($messages); $i++) {
-                yield $connection->send($messages[$i]);
-            }
+            $this->assertNull(yield $promise);
+        } catch (Exception $e) {
+            debug($e->getMessage());
+        } finally {
+            $server->stop();
         }
-
-        $this->setTimeout(30);
-
-        $this->assertEquals(count($result), count($messages));
     }
 }

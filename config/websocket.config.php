@@ -8,12 +8,12 @@ return [
             "0.0.0.0:13370"
         ],
         "allowed_origins" => [
-            //"http://localhost:8080"
+            "http://localhost:8080",
         ],
         "handlers" => [
         ],
         "middlewares" => [
-            //Middleware\WebsocketGuardMiddleware::class
+            Middleware\WebsocketGuardMiddleware::class
         ]
     ]
 ];

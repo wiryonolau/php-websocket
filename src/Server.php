@@ -21,6 +21,7 @@ class Server implements LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
+    protected $router;
     protected $config = [];
     protected $middlewares = [];
 
@@ -28,15 +29,14 @@ class Server implements LoggerAwareInterface
     {
         $this->config = $config;
         $this->middlewares = $middlewares;
+        $this->router = new Router();
     }
 
-    public function start() : void
+    public function prepare()
     {
         foreach ($this->config["listen_address"] as $address) {
             $server[] = AmpSocketServer::listen($address);
         }
-
-        $router = new Router();
 
         foreach($this->config["handlers"] as $handler) {
             if (!$handler["handler"] instanceof ClientHandler) {
@@ -44,7 +44,7 @@ class Server implements LoggerAwareInterface
             }
 
             call_user_func_array(
-                [$router, "addRoute"],
+                [$this->router, "addRoute"],
                 array_merge(
                     [
                         $handler["method"],
@@ -57,15 +57,19 @@ class Server implements LoggerAwareInterface
         }
 
         // Stack global middlewares to router
-        $router = $this->stack($router, $this->middlewares);
+        $this->router = $this->stack($this->router, $this->middlewares);
 
-        Loop::run(function() use ($server, $router) : Promise {
-            $httpServer = new HttpServer(
-                $server,
-                $router,
-                new PsrLoggerAdapter($this->getLogger())
-            );
+        return new HttpServer(
+            $server,
+            $this->router,
+            new PsrLoggerAdapter($this->getLogger())
+        );
+    }
 
+    public function start()
+    {
+        Loop::run(function() use ($server) : Promise {
+            $httpServer = $this->prepare();
             return $httpServer->start();
         });
     }

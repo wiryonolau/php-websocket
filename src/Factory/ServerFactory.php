@@ -23,9 +23,9 @@ class ServerFactory
 
         $middlewares = [];
         foreach ($config["middlewares"] as $middleware) {
-            $actualMiddleware = $container->get($middleware);
-            $actualMiddleware = $this->setObjectLogger($actualMiddleware, $logger);
-            $middlewares[] = $actualMiddleware;
+            $globalMiddleware = $container->get($middleware);
+            $globalMiddleware = $this->setObjectLogger($globalMiddleware, $logger);
+            $middlewares[] = $globalMiddleware;
         }
 
         foreach ($config["handlers"] as $key => $handler) {
